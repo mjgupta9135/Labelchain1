@@ -53,4 +53,20 @@ router.post("/signin", async (req, res) => {
     });
   }
 });
+router.get("/nextTask", workerMiddleware, async (req, res) => {
+  // @ts-ignore
+  const userId: string = req.userId;
+
+  const task = await getNextTask(Number(userId));
+
+  if (!task) {
+    res.status(411).json({
+      message: "No more tasks left for you to review",
+    });
+  } else {
+    res.json({
+      task,
+    });
+  }
+});
 export default router;
