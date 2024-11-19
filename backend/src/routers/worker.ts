@@ -2,7 +2,7 @@ import nacl from "tweetnacl";
 import { PrismaClient } from "@prisma/client";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "../config";
+
 import { workerMiddleware } from "../middleware";
 import { TOTAL_DECIMALS, WORKER_JWT_SECRET } from "../config";
 import { getNextTask } from "../db";
@@ -137,4 +137,13 @@ router.get("/balance", workerMiddleware, async (req, res) => {
     lockedAmount: worker?.pending_amount,
   });
 });
+
+router.post("/payout", workerMiddleware, async (req, res) => {
+  //@ts-ignore
+  const userId: string = req.userId;
+  const amount = await prismaClient.worker.findFirst({
+    where: { id: Number(userId) },
+  });
+});
+
 export default router;
