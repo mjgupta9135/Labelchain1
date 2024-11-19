@@ -91,4 +91,39 @@ router.post("/signin", async (req, res) => {
   }
 });
 
+router.post("/task", authMiddleware, async (req, res) => {
+  //@ts-ignore
+  const userId = req.userId;
+  // validate the inputs from the user;
+  const body = req.body;
+
+  const parseData = createTaskInput.safeParse(body);
+  if (!parseData.success) {
+    return res.status(411).json({
+      message: "You've sent the wrong inputs",
+    });
+  }
+
+  let response = await prismaClient.$transaction(async (tx) => {
+    const response = await tx.task.create({
+      data: {
+        title: parseData.data.title ?? DEFAULT_TITLE,
+        amount: 1,
+        signature: parseData.data.signature,
+        user_id: userId,
+      },
+    });
+    await tx.option.createMany({
+      data: parseData.data.options.map((x) => ({
+        image_url: x.imageUrl,
+        task_id: response.id,
+      })),
+    });
+
+    return response;
+  });
+  res.json({
+    id: response.id,
+  });
+});
 export default router;
