@@ -35,7 +35,7 @@ router.get("/presignedUrl", authMiddleware, async (req, res) => {
 
   const { url, fields } = await createPresignedPost(s3Client, {
     Bucket: "label-chain",
-    Key: `/label/${userId}/${Math.random()}/image.png`,
+    Key: `label/${userId}/${Math.random()}/image.png`,
     Conditions: [
       ["content-length-range", 0, 5 * 1024 * 1024], // 5 MB max
     ],
