@@ -14,6 +14,7 @@ import { authMiddleware } from "../middleware";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { createTaskInput } from "../types";
 import { Request } from "express";
+import { PublicKey } from "@solana/web3.js";
 
 interface AuthenticatedRequest extends Request {
   userId?: string; // or `number` if userId is always a number
@@ -56,11 +57,24 @@ router.get("/presignedUrl", authMiddleware, async (req, res) => {
 });
 
 router.post("/signin", async (req, res) => {
-  const hardCoded = "abcd";
+  const { publicKey, signature } = req.body;
+  const message = new TextEncoder().encode("Sign into mechanical turks");
+
+  const result = nacl.sign.detached.verify(
+    message,
+    new Uint8Array(signature.data),
+    new PublicKey(publicKey).toBytes()
+  );
+
+  if (!result) {
+    return res.status(411).json({
+      message: "Incorrect signature",
+    });
+  }
 
   const existingUser = await prismaClient.user.findFirst({
     where: {
-      address: hardCoded,
+      address: publicKey,
     },
   });
 
@@ -78,7 +92,7 @@ router.post("/signin", async (req, res) => {
   } else {
     const user = await prismaClient.user.create({
       data: {
-        address: hardCoded,
+        address: publicKey,
       },
     });
 
@@ -94,7 +108,6 @@ router.post("/signin", async (req, res) => {
     });
   }
 });
-
 router.post("/task", authMiddleware, async (req, res) => {
   //@ts-ignore
   const userId = req.userId;
