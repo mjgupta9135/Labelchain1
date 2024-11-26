@@ -54,10 +54,10 @@ export default function Page({
   return (
     <div>
       <Appbar />
-      <div className="text-2xl pt-20 flex justify-center">
+      <div className="text-2xl pt-20 text-black flex justify-center bg-white ">
         {taskDetails.title}
       </div>
-      <div className="flex justify-center pt-8">
+      <div className="flex justify-center text-black pt-8  bg-white">
         {Object.keys(result || {}).map((key) => (
           <Task
             key={key}
@@ -73,8 +73,11 @@ export default function Page({
 function Task({ imageUrl, votes }: { imageUrl: string; votes: number }) {
   return (
     <div>
-      <img className={"p-2 w-96 rounded-md"} src={imageUrl} />
-      <div className="flex justify-center">{votes}</div>
+      <img
+        className={"p-2 w-96 rounded-md min-h[100vh] text-black  bg-white"}
+        src={imageUrl}
+      />
+      <div className="flex justify-center text-black pb-80">{votes}</div>
     </div>
   );
 }
