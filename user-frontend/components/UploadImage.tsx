@@ -1,8 +1,10 @@
 "use client";
-const BACKEND_URL = "http://localhost:3000";
-const CLOUDFRONT_URL = "https://d2szwvl7yo497w.cloudfront.net";
+
 import axios from "axios";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const BACKEND_URL = "http://localhost:3000";
+const CLOUDFRONT_URL = "https://dbkhboglmtld2.cloudfront.net";
 
 export function UploadImage({
   onImageAdded,
@@ -17,69 +19,64 @@ export function UploadImage({
     setUploading(true);
     try {
       const file = e.target.files[0];
+      if (!file) throw new Error("No file selected");
+
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("User not authenticated");
+
       const response = await axios.get(`${BACKEND_URL}/v1/user/presignedUrl`, {
-        headers: {
-          Authorization: localStorage.getItem("token"),
-        },
+        headers: { Authorization: token },
       });
-      const presignedUrl = response.data.preSignedUrl;
+
+      const { preSignedUrl, fields } = response.data;
       const formData = new FormData();
-      formData.set("bucket", response.data.fields["bucket"]);
-      formData.set("X-Amz-Algorithm", response.data.fields["X-Amz-Algorithm"]);
-      formData.set(
-        "X-Amz-Credential",
-        response.data.fields["X-Amz-Credential"]
-      );
-      formData.set("X-Amz-Algorithm", response.data.fields["X-Amz-Algorithm"]);
-      formData.set("X-Amz-Date", response.data.fields["X-Amz-Date"]);
-      formData.set("key", response.data.fields["key"]);
-      formData.set("Policy", response.data.fields["Policy"]);
-      formData.set("X-Amz-Signature", response.data.fields["X-Amz-Signature"]);
-      formData.set("X-Amz-Algorithm", response.data.fields["X-Amz-Algorithm"]);
+      Object.entries(fields).forEach(([key, value]) => {
+        formData.set(key, value);
+      });
       formData.append("file", file);
-      const awsResponse = await axios.post(presignedUrl, formData);
 
-      onImageAdded(`${CLOUDFRONT_URL}/${response.data.fields["key"]}`);
+      await axios.post(preSignedUrl, formData);
+
+      const uploadedImageUrl = `${CLOUDFRONT_URL}/${fields["key"]}`;
+      onImageAdded(uploadedImageUrl);
     } catch (e) {
-      console.log(e);
+      console.error("Upload failed:", e);
+      alert("An error occurred during upload. Please try again.");
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   }
 
-  if (image) {
-    return <img className={"p-2 w-96 rounded"} src={image} />;
+  // Ensure no `setState` is called directly in the render phase
+  useEffect(() => {
+    if (image) {
+      console.log("Image updated:", image);
+    }
+  }, [image]);
+
+  if (uploading) {
+    return <div className="text-sm">Loading...</div>;
   }
 
-  return (
-    <div>
-      <div className="w-40 h-40 rounded border text-2xl cursor-pointer">
-        <div className="h-full flex justify-center flex-col relative w-full">
-          <div className="h-full flex justify-center w-full pt-16 text-4xl">
-            {uploading ? (
-              <div className="text-sm">Loading...</div>
-            ) : (
-              <>
-                +
-                <input
-                  className="w-full h-full bg-red-400"
-                  type="file"
-                  style={{
-                    position: "absolute",
-                    opacity: 0,
-                    top: 0,
-                    left: 0,
-                    bottom: 0,
-                    right: 0,
-                    width: "100%",
-                    height: "100%",
-                  }}
-                  onChange={onFileSelect}
-                />
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+  return image ? (
+    <img className="p-2 w-60 h-50 rounded border m-4" src={image} />
+  ) : (
+    <div className="w-40 h-40 rounded border-black border text-2xl text-center pt-16 text-black cursor-pointer relative">
+      +
+      <input
+        type="file"
+        onChange={onFileSelect}
+        style={{
+          position: "absolute",
+          opacity: 0,
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
+          width: "100%",
+          height: "100%",
+        }}
+      />
     </div>
   );
 }
