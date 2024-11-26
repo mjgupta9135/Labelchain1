@@ -5,14 +5,14 @@ import { BACKEND_URL } from "@/utils";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-// import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 
 export const Upload = () => {
   const [images, setImages] = useState<string[]>([]);
   const [title, setTitle] = useState("");
   const [txSignature, setTxSignature] = useState("");
-  //   const { publicKey, sendTransaction } = useWallet();
-  //   const { connection } = useConnection();
+  const { publicKey, sendTransaction } = useWallet();
+  const { connection } = useConnection();
   const router = useRouter();
 
   async function onSubmit() {
