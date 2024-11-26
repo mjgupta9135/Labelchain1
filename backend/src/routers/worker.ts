@@ -14,7 +14,7 @@ const router = Router();
 const TOTAL_SUBMISSIONS = 100;
 
 router.post("/signin", async (req, res) => {
-  const hardCoded = "adfcsbcd";
+  const hardCoded = "adfcsbcdfgh";
 
   const existingUser = await prismaClient.worker.findFirst({
     where: {
