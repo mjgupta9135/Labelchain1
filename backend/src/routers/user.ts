@@ -14,12 +14,16 @@ import { authMiddleware } from "../middleware";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { createTaskInput } from "../types";
 import { Request } from "express";
-import { PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 
 interface AuthenticatedRequest extends Request {
   userId?: string; // or `number` if userId is always a number
 }
-const PARENT_WALLET_ADDRESS = "2KeovpYvrgpziaDsq8nbNMP4mc48VNBVXb5arbqrg9Cq";
+const PARENT_WALLET_ADDRESS = "CmccrPtk1k1x71pnX5N1vo2TujEBoaV59tHR2hPagWVU";
+const connection = new Connection(
+  "https://solana-devnet.g.alchemy.com/v2/zGB45bQOXCJGbUUTskN6_c_wMqyikks1",
+  "confirmed" // Commitment level
+);
 
 const DEFAULT_TITLE = "Select the most clickable thumbnail";
 const prismaClient = new PrismaClient();
@@ -115,21 +119,71 @@ router.post("/task", authMiddleware, async (req, res) => {
   const body = req.body;
 
   const parseData = createTaskInput.safeParse(body);
+
+  const user = await prismaClient.user.findFirst({
+    where: {
+      id: userId,
+    },
+  });
+
   if (!parseData.success) {
     return res.status(411).json({
       message: "You've sent the wrong inputs",
     });
   }
 
+  const transaction = await connection.getTransaction(
+    parseData.data.signature,
+    {
+      maxSupportedTransactionVersion: 1,
+    }
+  );
+
+  console.log(transaction);
+
+  if (
+    (transaction?.meta?.postBalances[1] ?? 0) -
+      (transaction?.meta?.preBalances[1] ?? 0) !==
+    100000000
+  ) {
+    return res.status(411).json({
+      message: "Transaction signature/amount incorrect",
+    });
+  }
+
+  if (
+    transaction?.transaction.message.getAccountKeys().get(1)?.toString() !==
+    PARENT_WALLET_ADDRESS
+  ) {
+    return res.status(411).json({
+      message: "Transaction sent to wrong address",
+    });
+  }
+
+  if (
+    transaction?.transaction.message.getAccountKeys().get(0)?.toString() !==
+    user?.address
+  ) {
+    return res.status(411).json({
+      message: "Transaction sent to wrong address",
+    });
+  }
+  // was this money paid by this user address or a different address?
+
+  // parse the signature here to ensure the person has paid 0.1 SOL
+  // const transaction = Transaction.from(parseData.data.signature);
+
   let response = await prismaClient.$transaction(async (tx) => {
     const response = await tx.task.create({
       data: {
         title: parseData.data.title ?? DEFAULT_TITLE,
-        amount: 1 * TOTAL_DECIMALS,
+        amount: 0.1 * TOTAL_DECIMALS,
+        //TODO: Signature should be unique in the table else people can reuse a signature
         signature: parseData.data.signature,
         user_id: userId,
       },
     });
+
     await tx.option.createMany({
       data: parseData.data.options.map((x) => ({
         image_url: x.imageUrl,
@@ -139,6 +193,7 @@ router.post("/task", authMiddleware, async (req, res) => {
 
     return response;
   });
+
   res.json({
     id: response.id,
   });

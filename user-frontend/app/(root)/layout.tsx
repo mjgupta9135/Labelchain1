@@ -23,7 +23,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const network = WalletAdapterNetwork.Devnet;
-  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+  const endpoint =
+    "https://solana-devnet.g.alchemy.com/v2/zGB45bQOXCJGbUUTskN6_c_wMqyikks1";
   const wallets = useMemo(() => [], [network]);
 
   return (

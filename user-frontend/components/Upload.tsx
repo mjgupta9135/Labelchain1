@@ -6,6 +6,7 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 
 export const Upload = () => {
   const [images, setImages] = useState<string[]>([]);
@@ -23,7 +24,7 @@ export const Upload = () => {
           imageUrl: image,
         })),
         title,
-        signature: "hardcoded_signature",
+        signature: txSignature,
       },
       {
         headers: {
@@ -34,6 +35,33 @@ export const Upload = () => {
 
     router.push(`/task/${response.data.id}`);
   }
+  async function makePayment() {
+    console.log("In signature");
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: publicKey!,
+        toPubkey: new PublicKey("CmccrPtk1k1x71pnX5N1vo2TujEBoaV59tHR2hPagWVU"),
+        lamports: 100000000,
+      })
+    );
+
+    const {
+      context: { slot: minContextSlot },
+      value: { blockhash, lastValidBlockHeight },
+    } = await connection.getLatestBlockhashAndContext();
+
+    const signature = await sendTransaction(transaction, connection, {
+      minContextSlot,
+    });
+
+    await connection.confirmTransaction({
+      blockhash,
+      lastValidBlockHeight,
+      signature,
+    });
+    console.log(signature);
+    setTxSignature(signature);
+  }
 
   return (
     <div className="flex justify-center bg-white h-[100vh]">
@@ -41,11 +69,9 @@ export const Upload = () => {
         <div className="text-2xl text-left pt-20 w-full pl-4">
           Create a task
         </div>
-
         <label className="pl-4 block mt-2 text-md font-medium text-gray-900">
           Task details
         </label>
-
         <input
           onChange={(e) => {
             setTitle(e.target.value);
@@ -56,7 +82,6 @@ export const Upload = () => {
           placeholder="What is your task?"
           required
         />
-
         <label className="pl-4 block mt-8 text-md font-medium text-black">
           Add Images
         </label>
@@ -70,7 +95,6 @@ export const Upload = () => {
             />
           ))}
         </div>
-
         <div className="ml-4 pt-2 flex justify-center">
           <UploadImage
             onImageAdded={(imageUrl) => {
@@ -81,11 +105,11 @@ export const Upload = () => {
 
         <div className="flex justify-center">
           <button
+            onClick={txSignature ? onSubmit : makePayment}
             type="button"
-            onClick={onSubmit}
             className="mt-4 text-white bg-gray-800 hover:bg-gray-900 focus:outline-none focus:ring-4 focus:ring-gray-300 font-medium rounded-full text-sm px-5 py-2.5 me-2 mb-2 dark:bg-gray-800 dark:hover:bg-gray-700 dark:focus:ring-gray-700 dark:border-gray-700"
           >
-            Submit Task
+            {txSignature ? "Submit Task" : "Pay 0.1 SOL"}
           </button>
         </div>
       </div>
