@@ -7,6 +7,7 @@ import { workerMiddleware } from "../middleware";
 import { TOTAL_DECIMALS, WORKER_JWT_SECRET } from "../config";
 import { getNextTask } from "../db";
 import { createSubmissionInput } from "../types";
+import { PublicKey } from "@solana/web3.js";
 
 const prismaClient = new PrismaClient();
 
@@ -14,11 +15,26 @@ const router = Router();
 const TOTAL_SUBMISSIONS = 100;
 
 router.post("/signin", async (req, res) => {
-  const hardCoded = "adfcsbcdfgh";
+  const { publicKey, signature } = req.body;
+  const message = new TextEncoder().encode(
+    "Sign into mechanical turks as a worker"
+  );
+
+  const result = nacl.sign.detached.verify(
+    message,
+    new Uint8Array(signature.data),
+    new PublicKey(publicKey).toBytes()
+  );
+
+  if (!result) {
+    return res.status(411).json({
+      message: "Incorrect signature",
+    });
+  }
 
   const existingUser = await prismaClient.worker.findFirst({
     where: {
-      address: hardCoded,
+      address: publicKey,
     },
   });
 
@@ -32,11 +48,12 @@ router.post("/signin", async (req, res) => {
 
     res.json({
       token,
+      amount: existingUser.pending_amount / TOTAL_DECIMALS,
     });
   } else {
     const user = await prismaClient.worker.create({
       data: {
-        address: hardCoded,
+        address: publicKey,
         pending_amount: 0,
         locked_amount: 0,
       },
@@ -51,6 +68,7 @@ router.post("/signin", async (req, res) => {
 
     res.json({
       token,
+      amount: 0,
     });
   }
 });

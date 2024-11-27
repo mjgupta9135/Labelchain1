@@ -8,7 +8,7 @@ const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: "http://localhost:3001",
+    origin: ["http://localhost:3001", "http://localhost:3002"], // Allow both origins
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Include OPTIONS
     allowedHeaders: ["Content-Type", "Authorization"], // Add other headers if needed
     credentials: true, // If credentials are needed, set this to true
