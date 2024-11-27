@@ -20,10 +20,7 @@ interface AuthenticatedRequest extends Request {
   userId?: string; // or `number` if userId is always a number
 }
 const PARENT_WALLET_ADDRESS = "CmccrPtk1k1x71pnX5N1vo2TujEBoaV59tHR2hPagWVU";
-const connection = new Connection(
-  "https://solana-devnet.g.alchemy.com/v2/zGB45bQOXCJGbUUTskN6_c_wMqyikks1",
-  "confirmed" // Commitment level
-);
+const connection = new Connection("https://devnet.rpcpool.com");
 
 const DEFAULT_TITLE = "Select the most clickable thumbnail";
 const prismaClient = new PrismaClient();
@@ -115,88 +112,112 @@ router.post("/signin", async (req, res) => {
 router.post("/task", authMiddleware, async (req, res) => {
   //@ts-ignore
   const userId = req.userId;
-  // validate the inputs from the user;
-  const body = req.body;
 
+  // Validate the request body
+  const body = req.body;
   const parseData = createTaskInput.safeParse(body);
 
+  if (!parseData.success) {
+    return res.status(400).json({
+      message: "Invalid inputs",
+      errors: parseData.error.errors,
+    });
+  }
+
+  // Fetch the user
   const user = await prismaClient.user.findFirst({
     where: {
       id: userId,
     },
   });
 
-  if (!parseData.success) {
-    return res.status(411).json({
-      message: "You've sent the wrong inputs",
+  if (!user) {
+    return res.status(404).json({
+      message: "User not found",
     });
   }
 
-  const transaction = await connection.getTransaction(
-    parseData.data.signature,
-    {
-      maxSupportedTransactionVersion: 1,
+  try {
+    // Fetch transaction from Solana blockchain
+    const transaction = await connection.getTransaction(
+      parseData.data.signature,
+      {
+        maxSupportedTransactionVersion: 1,
+      }
+    );
+
+    if (!transaction) {
+      return res.status(404).json({
+        message: "Transaction not found",
+      });
     }
-  );
 
-  console.log(transaction);
+    // Validate transaction amount (0.1 SOL in lamports)
+    const transferAmount =
+      (transaction.meta?.postBalances[1] ?? 0) -
+      (transaction.meta?.preBalances[1] ?? 0);
 
-  if (
-    (transaction?.meta?.postBalances[1] ?? 0) -
-      (transaction?.meta?.preBalances[1] ?? 0) !==
-    100000000
-  ) {
-    return res.status(411).json({
-      message: "Transaction signature/amount incorrect",
+    if (transferAmount !== 100000000) {
+      return res.status(400).json({
+        message: "Transaction signature or amount incorrect",
+      });
+    }
+
+    // Validate recipient address
+    const recipientAddress = transaction.transaction.message
+      .getAccountKeys()
+      .get(1)
+      ?.toString();
+
+    if (recipientAddress !== PARENT_WALLET_ADDRESS) {
+      return res.status(400).json({
+        message: "Transaction sent to wrong address",
+      });
+    }
+
+    // Validate sender address
+    const senderAddress = transaction.transaction.message
+      .getAccountKeys()
+      .get(0)
+      ?.toString();
+
+    if (senderAddress !== user.address) {
+      return res.status(400).json({
+        message: "Transaction sent from a different address",
+      });
+    }
+
+    // Create task and options in the database
+    const response = await prismaClient.$transaction(async (tx) => {
+      const task = await tx.task.create({
+        data: {
+          title: parseData.data.title || DEFAULT_TITLE,
+          amount: 0.1 * TOTAL_DECIMALS,
+          signature: parseData.data.signature, // Ensure uniqueness
+          user_id: userId,
+        },
+      });
+
+      await tx.option.createMany({
+        data: parseData.data.options.map((option) => ({
+          image_url: option.imageUrl,
+          task_id: task.id,
+        })),
+      });
+
+      return task;
+    });
+    console.log("Task Finished");
+
+    return res.status(201).json({
+      id: response.id,
+    });
+  } catch (error) {
+    console.error("Error processing task:", error);
+    return res.status(500).json({
+      message: "An error occurred while processing the task",
     });
   }
-
-  if (
-    transaction?.transaction.message.getAccountKeys().get(1)?.toString() !==
-    PARENT_WALLET_ADDRESS
-  ) {
-    return res.status(411).json({
-      message: "Transaction sent to wrong address",
-    });
-  }
-
-  if (
-    transaction?.transaction.message.getAccountKeys().get(0)?.toString() !==
-    user?.address
-  ) {
-    return res.status(411).json({
-      message: "Transaction sent to wrong address",
-    });
-  }
-  // was this money paid by this user address or a different address?
-
-  // parse the signature here to ensure the person has paid 0.1 SOL
-  // const transaction = Transaction.from(parseData.data.signature);
-
-  let response = await prismaClient.$transaction(async (tx) => {
-    const response = await tx.task.create({
-      data: {
-        title: parseData.data.title ?? DEFAULT_TITLE,
-        amount: 0.1 * TOTAL_DECIMALS,
-        //TODO: Signature should be unique in the table else people can reuse a signature
-        signature: parseData.data.signature,
-        user_id: userId,
-      },
-    });
-
-    await tx.option.createMany({
-      data: parseData.data.options.map((x) => ({
-        image_url: x.imageUrl,
-        task_id: response.id,
-      })),
-    });
-
-    return response;
-  });
-
-  res.json({
-    id: response.id,
-  });
 });
 
 router.get("/task", authMiddleware, async (req: AuthenticatedRequest, res) => {

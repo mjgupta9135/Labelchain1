@@ -1,7 +1,6 @@
 "use client";
-// import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { UploadImage } from "@/components/UploadImage";
-import { BACKEND_URL } from "@/utils";
+const BACKEND_URL = "http://localhost:3000";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -36,42 +35,82 @@ export const Upload = () => {
     router.push(`/task/${response.data.id}`);
   }
   async function makePayment() {
-    console.log("In signature");
+    console.log("Initiating payment...");
+
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: publicKey!,
         toPubkey: new PublicKey("CmccrPtk1k1x71pnX5N1vo2TujEBoaV59tHR2hPagWVU"),
-        lamports: 100000000,
+        lamports: 100000000, // 0.1 SOL
       })
     );
 
-    const {
-      context: { slot: minContextSlot },
-      value: { blockhash, lastValidBlockHeight },
-    } = await connection.getLatestBlockhashAndContext();
+    try {
+      const {
+        context: { slot: minContextSlot },
+        value: { blockhash, lastValidBlockHeight },
+      } = await connection.getLatestBlockhashAndContext();
 
-    const signature = await sendTransaction(transaction, connection, {
-      minContextSlot,
-    });
+      const signature = await sendTransaction(transaction, connection, {
+        minContextSlot,
+      });
 
-    await connection.confirmTransaction({
-      blockhash,
-      lastValidBlockHeight,
-      signature,
-    });
-    console.log(signature);
-    setTxSignature(signature);
+      console.log(`Transaction sent. Signature: ${signature}`);
+
+      // Confirm transaction
+      let isConfirmed = false;
+      let retries = 0;
+      const maxRetries = 10;
+
+      while (!isConfirmed && retries < maxRetries) {
+        try {
+          const confirmation = await connection.confirmTransaction(
+            {
+              blockhash,
+              lastValidBlockHeight,
+              signature,
+            },
+            "finalized" // Ensure we wait for finalized commitment
+          );
+
+          if (confirmation.value.err) {
+            throw new Error(
+              `Transaction failed: ${JSON.stringify(confirmation.value.err)}`
+            );
+          }
+
+          isConfirmed = true;
+          console.log(`Transaction confirmed: ${signature}`);
+          setTxSignature(signature);
+        } catch (error) {
+          retries++;
+          console.log(
+            `Transaction pending. Retrying... (${retries}/${maxRetries})`
+          );
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds before retrying
+        }
+      }
+
+      if (!isConfirmed) {
+        throw new Error("Transaction confirmation timed out.");
+      }
+    } catch (error) {
+      console.error("Payment failed:" + error);
+      alert("Payment failed. Please try again.");
+    }
   }
 
   return (
-    <div className="flex justify-center bg-white h-[100vh]">
+    <div className="flex justify-center">
       <div className="max-w-screen-lg w-full">
         <div className="text-2xl text-left pt-20 w-full pl-4">
           Create a task
         </div>
+
         <label className="pl-4 block mt-2 text-md font-medium text-gray-900">
           Task details
         </label>
+
         <input
           onChange={(e) => {
             setTitle(e.target.value);
@@ -82,7 +121,8 @@ export const Upload = () => {
           placeholder="What is your task?"
           required
         />
-        <label className="pl-4 block mt-8 text-md font-medium text-black">
+
+        <label className="pl-4 block mt-8 text-md font-medium text-gray-900">
           Add Images
         </label>
         <div className="flex justify-center pt-4 max-w-screen-lg">
@@ -95,6 +135,7 @@ export const Upload = () => {
             />
           ))}
         </div>
+
         <div className="ml-4 pt-2 flex justify-center">
           <UploadImage
             onImageAdded={(imageUrl) => {
